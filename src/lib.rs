@@ -309,7 +309,11 @@ pub struct ComputedCarData {
 }
 
 // Compute all derived fields from user inputs and shared settings
-fn compute_car_data(car: &Car, settings: &SharedSettings) -> Option<ComputedCarData> {
+fn compute_car_data(
+    car: &Car,
+    settings: &SharedSettings,
+    maintenance_db: &MaintenanceCostDatabase,
+) -> Option<ComputedCarData> {
     // Parse required user inputs
     let purchase_price = car.purchase_price.parse::<f64>().ok()?;
     let current_mileage = car.current_mileage.parse::<f64>().ok()?;
@@ -337,9 +341,26 @@ fn compute_car_data(car: &Car, settings: &SharedSettings) -> Option<ComputedCarD
     // Step 4: Calculate insurance costs
     let insurance_cost_annual = insurance_cost_6month * 2.0;
 
-    // Step 5: Calculate maintenance costs (deferred, set to $0 for now)
-    let maintenance_cost_total = 0.0;
-    let maintenance_cost_annual = 0.0;
+    // Step 5: Calculate maintenance costs
+    // Split 50/50 between mileage-based and time-based costs
+    let maintenance_cost_total = if let Some(maint_data) =
+        maintenance_db.get(&car.make, &car.model)
+    {
+        let end_miles = current_mileage + remaining_miles;
+        let mileage_cost = maint_data.cost_for_mileage_range(current_mileage, end_miles);
+
+        // Calculate current age and end age of vehicle
+        // We need to estimate the vehicle's current age based on mileage
+        let current_age = current_mileage / settings.annual_mileage;
+        let end_age = current_age + years_remaining;
+        let time_cost = maint_data.cost_for_time_range(current_age, end_age);
+
+        // Average the two costs (50/50 split)
+        (mileage_cost + time_cost) / 2.0
+    } else {
+        0.0
+    };
+    let maintenance_cost_annual = maintenance_cost_total / years_remaining;
 
     // Step 6: Calculate opportunity cost
     let opportunity_cost = purchase_price * (settings.opportunity_cost_rate / 100.0) * years_remaining;
@@ -724,6 +745,7 @@ fn CarCard(
     expanded_cars: ReadSignal<Vec<usize>>,
     set_expanded_cars: WriteSignal<Vec<usize>>,
     settings: ReadSignal<SharedSettings>,
+    maintenance_db: ReadSignal<MaintenanceCostDatabase>,
     on_delete: Box<dyn Fn()>,
 ) -> impl IntoView {
     let is_expanded = move || expanded_cars.get().contains(&car_id);
@@ -753,7 +775,7 @@ fn CarCard(
         format!("{}{}", name, year)
     };
 
-    let computed_data = move || compute_car_data(&car.get(), &settings.get());
+    let computed_data = move || compute_car_data(&car.get(), &settings.get(), &maintenance_db.get());
 
     view! {
         <div class="bg-white overflow-hidden shadow rounded-lg">
@@ -820,10 +842,178 @@ fn CarCard(
 }
 
 #[component]
+fn MaintenanceDataEditor(
+    maintenance_db: ReadSignal<MaintenanceCostDatabase>,
+    set_maintenance_db: WriteSignal<MaintenanceCostDatabase>,
+) -> impl IntoView {
+    let (selected_key, set_selected_key) = signal::<Option<String>>(None);
+    let (is_expanded, set_is_expanded) = signal(false);
+
+    let all_makes_models = move || {
+        maintenance_db.get().get_all_keys()
+    };
+
+    let selected_data = move || {
+        if let Some(key) = selected_key.get() {
+            let parts: Vec<&str> = key.split('_').collect();
+            if parts.len() >= 2 {
+                let make = parts[0];
+                let model = parts[1..].join("_");
+                return maintenance_db.get().get(make, &model).cloned();
+            }
+        }
+        None
+    };
+
+    view! {
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex-1">
+                        <h2 class="text-xl font-semibold text-gray-900">"Maintenance Cost Data"</h2>
+                        <p class="mt-1 text-sm text-gray-600">
+                            "View and edit maintenance cost tables per make/model. Data is shared across all cars of the same type."
+                        </p>
+                    </div>
+                    <button
+                        class="ml-4 text-gray-600 hover:text-gray-800"
+                        on:click=move |_| set_is_expanded.update(|v| *v = !*v)
+                    >
+                        <svg
+                            class=move || format!(
+                                "h-6 w-6 transform transition-transform {}",
+                                if is_expanded.get() { "rotate-180" } else { "" }
+                            )
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                        >
+                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <Show when=move || is_expanded.get()>
+                    <div class="mt-6 space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                "Select Make/Model"
+                            </label>
+                            <select
+                                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                on:change=move |ev| {
+                                    let value = event_target_value(&ev);
+                                    set_selected_key.set(if value.is_empty() { None } else { Some(value) });
+                                }
+                            >
+                                <option value="">"-- Select a vehicle --"</option>
+                                <For
+                                    each=all_makes_models
+                                    key=|(make, model)| format!("{}_{}", make, model)
+                                    children=move |(make, model)| {
+                                        let key = format!("{}_{}", make.to_lowercase(), model.to_lowercase());
+                                        view! {
+                                            <option value=key>
+                                                {format!("{} {}", make, model)}
+                                            </option>
+                                        }
+                                    }
+                                />
+                            </select>
+                        </div>
+
+                        <Show when=move || selected_data().is_some()>
+                            {move || {
+                                if let Some(data) = selected_data() {
+                                    view! {
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                                            <div class="border border-gray-200 rounded-lg p-4">
+                                                <h3 class="text-lg font-semibold text-gray-900 mb-2">
+                                                    "By Mileage"
+                                                </h3>
+                                                <p class="text-xs text-gray-500 mb-3">
+                                                    "Cumulative cost per 10k miles"
+                                                </p>
+                                                <div class="space-y-2 max-h-96 overflow-y-auto">
+                                                    <For
+                                                        each=move || data.by_mileage.clone()
+                                                        key=|point| format!("{}", point.x)
+                                                        children=move |point| {
+                                                            view! {
+                                                                <div class="flex items-center space-x-2 text-sm">
+                                                                    <span class="w-20 text-gray-600">
+                                                                        {format!("{}k mi", point.x * 10.0)}
+                                                                    </span>
+                                                                    <span class="flex-1 text-gray-900">
+                                                                        {format!("${:.2}", point.y)}
+                                                                    </span>
+                                                                </div>
+                                                            }
+                                                        }
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div class="border border-gray-200 rounded-lg p-4">
+                                                <h3 class="text-lg font-semibold text-gray-900 mb-2">
+                                                    "By Time"
+                                                </h3>
+                                                <p class="text-xs text-gray-500 mb-3">
+                                                    "Cumulative cost per year"
+                                                </p>
+                                                <div class="space-y-2 max-h-96 overflow-y-auto">
+                                                    <For
+                                                        each=move || data.by_time.clone()
+                                                        key=|point| format!("{}", point.x)
+                                                        children=move |point| {
+                                                            view! {
+                                                                <div class="flex items-center space-x-2 text-sm">
+                                                                    <span class="w-20 text-gray-600">
+                                                                        {format!("{} yr", point.x)}
+                                                                    </span>
+                                                                    <span class="flex-1 text-gray-900">
+                                                                        {format!("${:.2}", point.y)}
+                                                                    </span>
+                                                                </div>
+                                                            }
+                                                        }
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                            <div class="flex">
+                                                <svg class="h-5 w-5 text-blue-400 mr-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                                                </svg>
+                                                <div class="flex-1">
+                                                    <h4 class="text-sm font-medium text-blue-800">"How to update this data"</h4>
+                                                    <p class="mt-1 text-sm text-blue-700">
+                                                        "This data comes from CarEdge.com. To update it, visit CarEdge, find your vehicle's maintenance costs, and manually enter the data here. Data is stored locally in your browser."
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    view! { <div></div> }.into_any()
+                                }
+                            }}
+                        </Show>
+                    </div>
+                </Show>
+            </div>
+        </div>
+    }
+}
+
+#[component]
 fn CarList(
     cars: ReadSignal<Vec<(ReadSignal<Car>, WriteSignal<Car>)>>,
     set_cars: WriteSignal<Vec<(ReadSignal<Car>, WriteSignal<Car>)>>,
     settings: ReadSignal<SharedSettings>,
+    maintenance_db: ReadSignal<MaintenanceCostDatabase>,
 ) -> impl IntoView {
     let (expanded_cars, set_expanded_cars) = signal(Vec::<usize>::new());
     let next_id = RwSignal::new(1_usize);
@@ -883,6 +1073,7 @@ fn CarList(
                             expanded_cars=expanded_cars
                             set_expanded_cars=set_expanded_cars
                             settings=settings
+                            maintenance_db=maintenance_db
                             on_delete=on_delete
                         />
                     }
@@ -906,11 +1097,150 @@ fn CarList(
 fn HomePage() -> impl IntoView {
     let (settings, set_settings) = signal(SharedSettings::default());
     let (cars, set_cars) = signal(Vec::<(ReadSignal<Car>, WriteSignal<Car>)>::new());
+    let (maintenance_db, set_maintenance_db) = signal(get_sample_maintenance_data());
 
     view! {
         <div class="px-4 py-6 sm:px-0 space-y-6">
             <SharedSettingsForm settings=settings set_settings=set_settings />
-            <CarList cars=cars set_cars=set_cars settings=settings />
+            <MaintenanceDataEditor maintenance_db=maintenance_db set_maintenance_db=set_maintenance_db />
+            <CarList cars=cars set_cars=set_cars settings=settings maintenance_db=maintenance_db />
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_maintenance_data_interpolation() {
+        let mut data = MaintenanceCostData::new("Toyota".to_string(), "Prius".to_string());
+
+        // Simple linear data: $100 per 10k miles
+        data.by_mileage = vec![
+            MaintenanceDataPoint { x: 1.0, y: 100.0 },
+            MaintenanceDataPoint { x: 2.0, y: 200.0 },
+            MaintenanceDataPoint { x: 3.0, y: 300.0 },
+        ];
+
+        // Test exact point
+        let cost = data.cost_for_mileage_range(0.0, 10000.0);
+        assert!((cost - 100.0).abs() < 0.01, "Expected ~100, got {}", cost);
+
+        // Test interpolation
+        let cost = data.cost_for_mileage_range(0.0, 15000.0);
+        assert!((cost - 150.0).abs() < 0.01, "Expected ~150, got {}", cost);
+
+        // Test range
+        let cost = data.cost_for_mileage_range(10000.0, 20000.0);
+        assert!((cost - 100.0).abs() < 0.01, "Expected ~100, got {}", cost);
+    }
+
+    #[test]
+    fn test_maintenance_data_extrapolation() {
+        let mut data = MaintenanceCostData::new("Toyota".to_string(), "Prius".to_string());
+
+        data.by_mileage = vec![
+            MaintenanceDataPoint { x: 1.0, y: 100.0 },
+            MaintenanceDataPoint { x: 2.0, y: 200.0 },
+        ];
+
+        // Test extrapolation beyond last point
+        let cost = data.cost_for_mileage_range(0.0, 30000.0);
+        assert!(cost > 200.0, "Expected >200, got {}", cost);
+    }
+
+    #[test]
+    fn test_sample_data_exists() {
+        let db = get_sample_maintenance_data();
+
+        // Test that Toyota Prius exists
+        let prius = db.get("Toyota", "Prius");
+        assert!(prius.is_some(), "Toyota Prius should exist in sample data");
+
+        let prius = prius.unwrap();
+        assert!(!prius.by_mileage.is_empty(), "Prius should have mileage data");
+        assert!(!prius.by_time.is_empty(), "Prius should have time data");
+
+        // Test that Ford F-150 exists
+        let f150 = db.get("Ford", "F-150");
+        assert!(f150.is_some(), "Ford F-150 should exist in sample data");
+
+        let f150 = f150.unwrap();
+        assert!(!f150.by_mileage.is_empty(), "F-150 should have mileage data");
+        assert!(!f150.by_time.is_empty(), "F-150 should have time data");
+
+        // Verify F-150 costs more than Prius (trucks typically cost more to maintain)
+        let prius_100k = prius.cost_for_mileage_range(0.0, 100000.0);
+        let f150_100k = f150.cost_for_mileage_range(0.0, 100000.0);
+        assert!(f150_100k > prius_100k, "F-150 should cost more than Prius to maintain");
+    }
+
+    #[test]
+    fn test_maintenance_cost_calculation_with_car() {
+        let db = get_sample_maintenance_data();
+        let settings = SharedSettings::default();
+
+        let mut car = Car::new(1);
+        car.make = "Toyota".to_string();
+        car.model = "Prius".to_string();
+        car.purchase_price = "25000".to_string();
+        car.current_mileage = "50000".to_string();
+        car.mpg = "50".to_string();
+        car.insurance_cost = "500".to_string();
+
+        let computed = compute_car_data(&car, &settings, &db);
+        assert!(computed.is_some(), "Should compute data for valid car");
+
+        let computed = computed.unwrap();
+        assert!(computed.maintenance_cost_total > 0.0, "Should have maintenance costs");
+        assert!(computed.maintenance_cost_annual > 0.0, "Should have annual maintenance costs");
+
+        // Maintenance should be included in total
+        assert!(computed.total_cost_of_ownership > computed.fuel_cost_total,
+            "TCO should include more than just fuel");
+    }
+
+    #[test]
+    fn test_maintenance_cost_50_50_split() {
+        let mut data = MaintenanceCostData::new("Test".to_string(), "Car".to_string());
+
+        // Set up simple linear data: $100 per 10k miles / per year
+        data.by_mileage = vec![
+            MaintenanceDataPoint { x: 10.0, y: 1000.0 },
+            MaintenanceDataPoint { x: 20.0, y: 2000.0 },
+        ];
+        data.by_time = vec![
+            MaintenanceDataPoint { x: 10.0, y: 1200.0 },
+            MaintenanceDataPoint { x: 20.0, y: 2400.0 },
+        ];
+
+        let mut db = MaintenanceCostDatabase::default();
+        db.set(data);
+
+        let settings = SharedSettings::default(); // 12k miles/year, 200k lifetime
+
+        let mut car = Car::new(1);
+        car.make = "Test".to_string();
+        car.model = "Car".to_string();
+        car.purchase_price = "10000".to_string();
+        car.current_mileage = "0".to_string();
+        car.mpg = "30".to_string();
+        car.insurance_cost = "500".to_string();
+
+        let computed = compute_car_data(&car, &settings, &db);
+        assert!(computed.is_some());
+
+        let computed = computed.unwrap();
+
+        // Car will go from 0 to 200k miles (20.0 x units) and 0 to ~16.67 years
+        // Mileage cost: 2000 (20.0 * 100 per unit)
+        // Time cost: ~2000 (16.67 * 120 per year)
+        // Average: 2000
+
+        // Verify it's using both mileage and time (should be ~2000 for 50/50 split)
+        assert!(computed.maintenance_cost_total > 1500.0 && computed.maintenance_cost_total < 2500.0,
+            "Maintenance cost should be around 2000 for 50/50 split. Got {}",
+            computed.maintenance_cost_total);
     }
 }
