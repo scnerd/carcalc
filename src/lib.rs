@@ -2,6 +2,7 @@ use leptos::prelude::*;
 use leptos_meta::*;
 use leptos_router::{components::*, *};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 // Data Structures
 
@@ -22,6 +23,240 @@ impl Default for SharedSettings {
             average_gas_price: 3.50,
         }
     }
+}
+
+/// Represents a single data point in a maintenance cost table
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct MaintenanceDataPoint {
+    pub x: f64,  // mileage (in 10k miles) or years
+    pub y: f64,  // cumulative cost in dollars
+}
+
+/// Maintenance cost data for a specific make+model
+/// Contains two tables: one based on mileage, one based on time
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MaintenanceCostData {
+    pub make: String,
+    pub model: String,
+    /// Data points where x = 10k miles, y = cumulative cost over those miles
+    pub by_mileage: Vec<MaintenanceDataPoint>,
+    /// Data points where x = years, y = cumulative cost over those years
+    pub by_time: Vec<MaintenanceDataPoint>,
+}
+
+impl MaintenanceCostData {
+    fn new(make: String, model: String) -> Self {
+        Self {
+            make,
+            model,
+            by_mileage: Vec::new(),
+            by_time: Vec::new(),
+        }
+    }
+
+    /// Get a unique key for this make+model combination
+    pub fn key(&self) -> String {
+        format!("{}_{}", self.make.to_lowercase(), self.model.to_lowercase())
+    }
+
+    /// Create a key from make and model strings
+    pub fn make_key(make: &str, model: &str) -> String {
+        format!("{}_{}", make.to_lowercase(), model.to_lowercase())
+    }
+
+    /// Calculate maintenance cost for a given mileage range
+    /// Uses linear interpolation between data points
+    pub fn cost_for_mileage_range(&self, start_miles: f64, end_miles: f64) -> f64 {
+        if self.by_mileage.is_empty() || end_miles <= start_miles {
+            return 0.0;
+        }
+
+        let start_10k = start_miles / 10000.0;
+        let end_10k = end_miles / 10000.0;
+
+        let start_cost = self.interpolate_cost(&self.by_mileage, start_10k);
+        let end_cost = self.interpolate_cost(&self.by_mileage, end_10k);
+
+        (end_cost - start_cost).max(0.0)
+    }
+
+    /// Calculate maintenance cost for a given time range
+    /// Uses linear interpolation between data points
+    pub fn cost_for_time_range(&self, start_years: f64, end_years: f64) -> f64 {
+        if self.by_time.is_empty() || end_years <= start_years {
+            return 0.0;
+        }
+
+        let start_cost = self.interpolate_cost(&self.by_time, start_years);
+        let end_cost = self.interpolate_cost(&self.by_time, end_years);
+
+        (end_cost - start_cost).max(0.0)
+    }
+
+    /// Interpolate cost at a given x value from a series of data points
+    fn interpolate_cost(&self, data: &[MaintenanceDataPoint], x: f64) -> f64 {
+        if data.is_empty() {
+            return 0.0;
+        }
+
+        // If before first point, extrapolate linearly from origin
+        if x <= data[0].x {
+            if data[0].x == 0.0 {
+                return data[0].y;
+            }
+            return (data[0].y / data[0].x) * x;
+        }
+
+        // If after last point, extrapolate using last two points
+        if x >= data[data.len() - 1].x {
+            if data.len() == 1 {
+                // Only one point, extrapolate from origin
+                return (data[0].y / data[0].x) * x;
+            }
+            let p1 = &data[data.len() - 2];
+            let p2 = &data[data.len() - 1];
+            let slope = (p2.y - p1.y) / (p2.x - p1.x);
+            return p2.y + slope * (x - p2.x);
+        }
+
+        // Find the two points to interpolate between
+        for i in 0..data.len() - 1 {
+            if x >= data[i].x && x <= data[i + 1].x {
+                let p1 = &data[i];
+                let p2 = &data[i + 1];
+
+                if p2.x == p1.x {
+                    return p1.y;
+                }
+
+                let ratio = (x - p1.x) / (p2.x - p1.x);
+                return p1.y + ratio * (p2.y - p1.y);
+            }
+        }
+
+        0.0
+    }
+}
+
+/// Storage for all maintenance cost data, keyed by make_model
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct MaintenanceCostDatabase {
+    pub data: HashMap<String, MaintenanceCostData>,
+}
+
+impl MaintenanceCostDatabase {
+    /// Get maintenance data for a specific make+model
+    pub fn get(&self, make: &str, model: &str) -> Option<&MaintenanceCostData> {
+        let key = MaintenanceCostData::make_key(make, model);
+        self.data.get(&key)
+    }
+
+    /// Set maintenance data for a specific make+model
+    pub fn set(&mut self, data: MaintenanceCostData) {
+        let key = data.key();
+        self.data.insert(key, data);
+    }
+
+    /// Remove maintenance data for a specific make+model
+    pub fn remove(&mut self, make: &str, model: &str) {
+        let key = MaintenanceCostData::make_key(make, model);
+        self.data.remove(&key);
+    }
+
+    /// Get all make+model combinations that have maintenance data
+    pub fn get_all_keys(&self) -> Vec<(String, String)> {
+        self.data.values()
+            .map(|d| (d.make.clone(), d.model.clone()))
+            .collect()
+    }
+}
+
+/// Sample maintenance cost data based on typical costs for popular vehicles
+/// This data represents cumulative maintenance costs over time and mileage
+pub fn get_sample_maintenance_data() -> MaintenanceCostDatabase {
+    let mut db = MaintenanceCostDatabase::default();
+
+    // Toyota Prius - known for reliability and lower maintenance costs
+    // Based on typical maintenance schedules: oil changes, tire rotations, brake service, etc.
+    let mut prius = MaintenanceCostData::new("Toyota".to_string(), "Prius".to_string());
+
+    // By mileage (x = 10k miles increments)
+    // Cumulative costs include: oil changes, filters, tire rotations, brake pads, fluids, etc.
+    prius.by_mileage = vec![
+        MaintenanceDataPoint { x: 1.0, y: 350.0 },    // 10k miles
+        MaintenanceDataPoint { x: 2.0, y: 700.0 },    // 20k miles
+        MaintenanceDataPoint { x: 3.0, y: 1100.0 },   // 30k miles (major service)
+        MaintenanceDataPoint { x: 4.0, y: 1450.0 },   // 40k miles
+        MaintenanceDataPoint { x: 5.0, y: 1800.0 },   // 50k miles
+        MaintenanceDataPoint { x: 6.0, y: 2300.0 },   // 60k miles (major service)
+        MaintenanceDataPoint { x: 7.0, y: 2700.0 },   // 70k miles
+        MaintenanceDataPoint { x: 8.0, y: 3100.0 },   // 80k miles
+        MaintenanceDataPoint { x: 9.0, y: 3650.0 },   // 90k miles (major service)
+        MaintenanceDataPoint { x: 10.0, y: 4100.0 },  // 100k miles
+        MaintenanceDataPoint { x: 12.0, y: 5200.0 },  // 120k miles (major service)
+        MaintenanceDataPoint { x: 15.0, y: 6800.0 },  // 150k miles
+        MaintenanceDataPoint { x: 20.0, y: 9500.0 },  // 200k miles
+    ];
+
+    // By time (x = years)
+    // Split 50/50 with mileage-based costs, assuming 12k miles/year
+    prius.by_time = vec![
+        MaintenanceDataPoint { x: 1.0, y: 420.0 },    // 1 year
+        MaintenanceDataPoint { x: 2.0, y: 840.0 },    // 2 years
+        MaintenanceDataPoint { x: 3.0, y: 1320.0 },   // 3 years
+        MaintenanceDataPoint { x: 4.0, y: 1740.0 },   // 4 years
+        MaintenanceDataPoint { x: 5.0, y: 2160.0 },   // 5 years
+        MaintenanceDataPoint { x: 6.0, y: 2760.0 },   // 6 years
+        MaintenanceDataPoint { x: 7.0, y: 3240.0 },   // 7 years
+        MaintenanceDataPoint { x: 8.0, y: 3720.0 },   // 8 years
+        MaintenanceDataPoint { x: 9.0, y: 4380.0 },   // 9 years
+        MaintenanceDataPoint { x: 10.0, y: 4920.0 },  // 10 years
+        MaintenanceDataPoint { x: 12.0, y: 6240.0 },  // 12 years
+        MaintenanceDataPoint { x: 15.0, y: 8160.0 },  // 15 years
+    ];
+
+    db.set(prius);
+
+    // Ford F-150 - popular truck with higher maintenance costs
+    // Larger engine, more fluids, heavier wear on components
+    let mut f150 = MaintenanceCostData::new("Ford".to_string(), "F-150".to_string());
+
+    // By mileage (x = 10k miles increments)
+    f150.by_mileage = vec![
+        MaintenanceDataPoint { x: 1.0, y: 500.0 },    // 10k miles
+        MaintenanceDataPoint { x: 2.0, y: 1000.0 },   // 20k miles
+        MaintenanceDataPoint { x: 3.0, y: 1600.0 },   // 30k miles (major service)
+        MaintenanceDataPoint { x: 4.0, y: 2150.0 },   // 40k miles
+        MaintenanceDataPoint { x: 5.0, y: 2700.0 },   // 50k miles
+        MaintenanceDataPoint { x: 6.0, y: 3400.0 },   // 60k miles (major service)
+        MaintenanceDataPoint { x: 7.0, y: 4000.0 },   // 70k miles
+        MaintenanceDataPoint { x: 8.0, y: 4600.0 },   // 80k miles
+        MaintenanceDataPoint { x: 9.0, y: 5350.0 },   // 90k miles (major service)
+        MaintenanceDataPoint { x: 10.0, y: 6000.0 },  // 100k miles
+        MaintenanceDataPoint { x: 12.0, y: 7600.0 },  // 120k miles (major service)
+        MaintenanceDataPoint { x: 15.0, y: 10000.0 }, // 150k miles
+        MaintenanceDataPoint { x: 20.0, y: 14000.0 }, // 200k miles
+    ];
+
+    // By time (x = years)
+    f150.by_time = vec![
+        MaintenanceDataPoint { x: 1.0, y: 600.0 },    // 1 year
+        MaintenanceDataPoint { x: 2.0, y: 1200.0 },   // 2 years
+        MaintenanceDataPoint { x: 3.0, y: 1920.0 },   // 3 years
+        MaintenanceDataPoint { x: 4.0, y: 2580.0 },   // 4 years
+        MaintenanceDataPoint { x: 5.0, y: 3240.0 },   // 5 years
+        MaintenanceDataPoint { x: 6.0, y: 4080.0 },   // 6 years
+        MaintenanceDataPoint { x: 7.0, y: 4800.0 },   // 7 years
+        MaintenanceDataPoint { x: 8.0, y: 5520.0 },   // 8 years
+        MaintenanceDataPoint { x: 9.0, y: 6420.0 },   // 9 years
+        MaintenanceDataPoint { x: 10.0, y: 7200.0 },  // 10 years
+        MaintenanceDataPoint { x: 12.0, y: 9120.0 },  // 12 years
+        MaintenanceDataPoint { x: 15.0, y: 12000.0 }, // 15 years
+    ];
+
+    db.set(f150);
+
+    db
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
