@@ -1,0 +1,75 @@
+version: '3'
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  # Development
+  dev:
+    desc: Start development server with hot reload
+    cmds:
+      - trunk serve
+
+  serve:
+    desc: Alias for dev
+    cmds:
+      - task dev
+
+  # Building
+  build:
+    desc: Build the project in development mode
+    cmds:
+      - trunk build
+
+  build:release:
+    desc: Build optimized production bundle
+    cmds:
+      - trunk build --release
+
+  # Code Quality
+  check:
+    desc: Check code compiles without building
+    cmds:
+      - cargo check
+
+  test:
+    desc: Run all tests
+    cmds:
+      - cargo test
+
+  clippy:
+    desc: Run clippy linter
+    cmds:
+      - cargo clippy
+
+  fmt:
+    desc: Format code with rustfmt
+    cmds:
+      - cargo fmt
+
+  fmt:check:
+    desc: Check code formatting without modifying files
+    cmds:
+      - cargo fmt -- --check
+
+  # Maintenance
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - cargo clean
+
+  install:
+    desc: Install required dependencies (Rust target and Trunk)
+    cmds:
+      - rustup target add wasm32-unknown-unknown
+      - cargo install trunk
+
+  # Combined Tasks
+  ci:
+    desc: Run all CI checks (format, clippy, test)
+    cmds:
+      - task fmt:check
+      - task clippy
+      - task test

@@ -294,9 +294,68 @@ Tasks:
 
 ## Development Guidelines
 
+### Development Workflow with Taskfile
+
+This project uses [Task](https://taskfile.dev/) for cross-platform task automation. All commands work on both Windows CMD and Bash.
+
+#### Quick Reference for Claude Code
+
+When working on this project, use these Task commands optimized for Claude Code workflows:
+
+**Starting Development**
+```bash
+task dev          # Start dev server with hot reload at http://127.0.0.1:8080
+```
+
+**Code Quality Checks (Run Before Committing)**
+```bash
+task ci           # Complete CI pipeline: format check, clippy, and tests
+```
+
+**Individual Quality Checks**
+```bash
+task fmt          # Format code with rustfmt
+task fmt:check    # Check formatting without modifying
+task clippy       # Run clippy linter
+task test         # Run all tests
+task check        # Quick compilation check
+```
+
+**Building**
+```bash
+task build              # Development build
+task build:release      # Optimized production build
+```
+
+**Maintenance**
+```bash
+task clean        # Clean build artifacts
+task install      # Install Rust WASM target and Trunk
+```
+
+#### Recommended Claude Code Workflow
+
+1. **Before making changes**: Run `task check` to ensure the project compiles
+2. **While developing**: Keep `task dev` running in background to see live updates
+3. **After changes**: Run `task ci` to validate all checks pass
+4. **Before committing**: Ensure `task ci` passes successfully
+
+#### Why Use Task Commands
+
+✅ **Prefer Task commands** (e.g., `task test`, `task ci`) because:
+- Cross-platform compatibility guaranteed
+- Consistent interface across all operations
+- Combined operations like `task ci` run multiple checks
+- Easier for users to reproduce
+
+❌ **Avoid direct cargo/trunk commands** unless needed for:
+- Advanced cargo features not exposed in Taskfile
+- Debugging specific compilation issues
+- Custom flags not covered by Task commands
+
 ### Code Style
-- Use `cargo fmt` for consistent formatting
-- Run `cargo clippy` and address all warnings
+- Use `task fmt` for consistent formatting
+- Run `task clippy` and address all warnings before committing
 - Write descriptive variable and function names
 - Add inline comments for complex logic
 - Keep functions small and focused (single responsibility)
