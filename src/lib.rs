@@ -59,6 +59,80 @@ impl Car {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct ComputedCarData {
+    pub remaining_miles: f64,
+    pub years_remaining: f64,
+    pub fuel_cost_total: f64,
+    pub fuel_cost_annual: f64,
+    pub insurance_cost_annual: f64,
+    pub maintenance_cost_total: f64,
+    pub maintenance_cost_annual: f64,
+    pub opportunity_cost: f64,
+    pub total_cost_of_ownership: f64,
+    pub annual_cost: f64,
+}
+
+// Compute all derived fields from user inputs and shared settings
+fn compute_car_data(car: &Car, settings: &SharedSettings) -> Option<ComputedCarData> {
+    // Parse required user inputs
+    let purchase_price = car.purchase_price.parse::<f64>().ok()?;
+    let current_mileage = car.current_mileage.parse::<f64>().ok()?;
+    let mpg = car.mpg.parse::<f64>().ok()?;
+    let insurance_cost_6month = car.insurance_cost.parse::<f64>().ok()?;
+
+    // Validate inputs
+    if mpg <= 0.0 || settings.annual_mileage <= 0.0 {
+        return None;
+    }
+
+    // Step 1: Calculate remaining miles
+    let remaining_miles = settings.lifetime_miles - current_mileage;
+    if remaining_miles <= 0.0 {
+        return None;
+    }
+
+    // Step 2: Calculate years remaining
+    let years_remaining = remaining_miles / settings.annual_mileage;
+
+    // Step 3: Calculate fuel costs
+    let fuel_cost_total = (remaining_miles / mpg) * settings.average_gas_price;
+    let fuel_cost_annual = fuel_cost_total / years_remaining;
+
+    // Step 4: Calculate insurance costs
+    let insurance_cost_annual = insurance_cost_6month * 2.0;
+
+    // Step 5: Calculate maintenance costs (deferred, set to $0 for now)
+    let maintenance_cost_total = 0.0;
+    let maintenance_cost_annual = 0.0;
+
+    // Step 6: Calculate opportunity cost
+    let opportunity_cost = purchase_price * (settings.opportunity_cost_rate / 100.0) * years_remaining;
+
+    // Step 7: Calculate total cost of ownership
+    let total_cost_of_ownership = purchase_price
+        + fuel_cost_total
+        + maintenance_cost_total
+        + (insurance_cost_annual * years_remaining)
+        + opportunity_cost;
+
+    // Step 8: Calculate annual cost
+    let annual_cost = total_cost_of_ownership / years_remaining;
+
+    Some(ComputedCarData {
+        remaining_miles,
+        years_remaining,
+        fuel_cost_total,
+        fuel_cost_annual,
+        insurance_cost_annual,
+        maintenance_cost_total,
+        maintenance_cost_annual,
+        opportunity_cost,
+        total_cost_of_ownership,
+        annual_cost,
+    })
+}
+
 // Components
 
 #[component]
@@ -172,6 +246,90 @@ fn SharedSettingsForm(
 }
 
 #[component]
+fn CarCostSummary(computed: ComputedCarData) -> impl IntoView {
+    view! {
+        <div class="mt-6 border-t border-gray-200 pt-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">"Calculated Costs"</h3>
+
+            <div class="bg-blue-50 rounded-lg p-4 mb-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-sm font-medium text-gray-600">"Total Cost of Ownership"</div>
+                        <div class="text-2xl font-bold text-blue-600">
+                            {format!("${:.2}", computed.total_cost_of_ownership)}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-sm font-medium text-gray-600">"Annual Cost"</div>
+                        <div class="text-2xl font-bold text-blue-600">
+                            {format!("${:.2}", computed.annual_cost)}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div class="bg-white p-3 rounded border border-gray-200">
+                    <div class="text-xs text-gray-500 uppercase tracking-wide">"Years Remaining"</div>
+                    <div class="text-lg font-semibold text-gray-900 mt-1">
+                        {format!("{:.1}", computed.years_remaining)}
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 rounded border border-gray-200">
+                    <div class="text-xs text-gray-500 uppercase tracking-wide">"Remaining Miles"</div>
+                    <div class="text-lg font-semibold text-gray-900 mt-1">
+                        {format!("{:.0}", computed.remaining_miles)}
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 rounded border border-gray-200">
+                    <div class="text-xs text-gray-500 uppercase tracking-wide">"Fuel Cost (Total)"</div>
+                    <div class="text-lg font-semibold text-gray-900 mt-1">
+                        {format!("${:.2}", computed.fuel_cost_total)}
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 rounded border border-gray-200">
+                    <div class="text-xs text-gray-500 uppercase tracking-wide">"Fuel Cost (Annual)"</div>
+                    <div class="text-lg font-semibold text-gray-900 mt-1">
+                        {format!("${:.2}", computed.fuel_cost_annual)}
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 rounded border border-gray-200">
+                    <div class="text-xs text-gray-500 uppercase tracking-wide">"Insurance (Annual)"</div>
+                    <div class="text-lg font-semibold text-gray-900 mt-1">
+                        {format!("${:.2}", computed.insurance_cost_annual)}
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 rounded border border-gray-200">
+                    <div class="text-xs text-gray-500 uppercase tracking-wide">"Opportunity Cost"</div>
+                    <div class="text-lg font-semibold text-gray-900 mt-1">
+                        {format!("${:.2}", computed.opportunity_cost)}
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 rounded border border-gray-200">
+                    <div class="text-xs text-gray-500 uppercase tracking-wide">"Maintenance (Total)"</div>
+                    <div class="text-lg font-semibold text-gray-900 mt-1">
+                        {format!("${:.2}", computed.maintenance_cost_total)}
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 rounded border border-gray-200">
+                    <div class="text-xs text-gray-500 uppercase tracking-wide">"Maintenance (Annual)"</div>
+                    <div class="text-lg font-semibold text-gray-900 mt-1">
+                        {format!("${:.2}", computed.maintenance_cost_annual)}
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+#[component]
 fn CarForm(
     car: ReadSignal<Car>,
     set_car: WriteSignal<Car>,
@@ -224,7 +382,10 @@ fn CarForm(
                     />
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">"Purchase Price ($)"</label>
+                    <label class="block text-sm font-medium text-gray-700">
+                        "Purchase Price ($)"
+                        <span class="text-red-600">" *"</span>
+                    </label>
                     <input
                         type="text"
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
@@ -235,7 +396,10 @@ fn CarForm(
                     />
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">"Current Mileage"</label>
+                    <label class="block text-sm font-medium text-gray-700">
+                        "Current Mileage"
+                        <span class="text-red-600">" *"</span>
+                    </label>
                     <input
                         type="text"
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
@@ -246,7 +410,10 @@ fn CarForm(
                     />
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">"MPG"</label>
+                    <label class="block text-sm font-medium text-gray-700">
+                        "MPG"
+                        <span class="text-red-600">" *"</span>
+                    </label>
                     <input
                         type="text"
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
@@ -257,7 +424,10 @@ fn CarForm(
                     />
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">"Insurance Cost (6-month premium $)"</label>
+                    <label class="block text-sm font-medium text-gray-700">
+                        "Insurance Cost (6-month premium $)"
+                        <span class="text-red-600">" *"</span>
+                    </label>
                     <input
                         type="text"
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
@@ -318,6 +488,7 @@ fn CarCard(
     car_id: usize,
     expanded_cars: ReadSignal<Vec<usize>>,
     set_expanded_cars: WriteSignal<Vec<usize>>,
+    settings: ReadSignal<SharedSettings>,
     on_delete: Box<dyn Fn()>,
 ) -> impl IntoView {
     let is_expanded = move || expanded_cars.get().contains(&car_id);
@@ -346,6 +517,8 @@ fn CarCard(
         };
         format!("{}{}", name, year)
     };
+
+    let computed_data = move || compute_car_data(&car.get(), &settings.get());
 
     view! {
         <div class="bg-white overflow-hidden shadow rounded-lg">
@@ -380,6 +553,31 @@ fn CarCard(
 
                 <Show when=is_expanded>
                     <CarForm car=car set_car=set_car />
+                    {move || {
+                        if let Some(computed) = computed_data() {
+                            view! { <CarCostSummary computed=computed /> }.into_any()
+                        } else {
+                            view! {
+                                <div class="mt-6 border-t border-gray-200 pt-6">
+                                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                                        <div class="flex">
+                                            <svg class="h-5 w-5 text-yellow-400 mr-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                            </svg>
+                                            <div>
+                                                <h4 class="text-sm font-medium text-yellow-800">"Missing required information"</h4>
+                                                <p class="mt-1 text-sm text-yellow-700">
+                                                    "Please fill in all required fields (marked with "
+                                                    <span class="text-red-600">"*"</span>
+                                                    ") to calculate costs."
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }.into_any()
+                        }
+                    }}
                 </Show>
             </div>
         </div>
@@ -390,6 +588,7 @@ fn CarCard(
 fn CarList(
     cars: ReadSignal<Vec<(ReadSignal<Car>, WriteSignal<Car>)>>,
     set_cars: WriteSignal<Vec<(ReadSignal<Car>, WriteSignal<Car>)>>,
+    settings: ReadSignal<SharedSettings>,
 ) -> impl IntoView {
     let (expanded_cars, set_expanded_cars) = signal(Vec::<usize>::new());
     let next_id = RwSignal::new(1_usize);
@@ -448,6 +647,7 @@ fn CarList(
                             car_id=car_id
                             expanded_cars=expanded_cars
                             set_expanded_cars=set_expanded_cars
+                            settings=settings
                             on_delete=on_delete
                         />
                     }
@@ -475,7 +675,7 @@ fn HomePage() -> impl IntoView {
     view! {
         <div class="px-4 py-6 sm:px-0 space-y-6">
             <SharedSettingsForm settings=settings set_settings=set_settings />
-            <CarList cars=cars set_cars=set_cars />
+            <CarList cars=cars set_cars=set_cars settings=settings />
         </div>
     }
 }
