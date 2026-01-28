@@ -15,7 +15,7 @@ tasks:
   serve:
     desc: Alias for dev
     cmds:
-      - task dev
+      - task: dev
 
   # Building
   build:
@@ -56,6 +56,11 @@ tasks:
     cmds:
       - cargo clippy
 
+  clippy:fix:
+    desc: Run clippy linter with auto-fix
+    cmds:
+      - cargo clippy --fix --allow-dirty
+
   fmt:
     desc: Format code with rustfmt
     cmds:
@@ -72,6 +77,22 @@ tasks:
     cmds:
       - cargo clean
 
+  lock:cargo:
+    sources:
+      - Cargo.toml
+    generates:
+      - Cargo.lock
+    cmds:
+      - cargo generate-lockfile
+
+  update:cargo:
+    sources:
+      - Cargo.toml
+    generates:
+      - Cargo.lock
+    cmds:
+      - cargo update
+
   install:
     desc: Install required dependencies (Rust target and Trunk)
     cmds:
@@ -85,10 +106,29 @@ tasks:
       - cargo install wasm-bindgen-cli --version 0.2.108
       - npx playwright install chromium
 
+  install:pre-commit:
+    desc: Install pre-commit hooks to ensure that we dont commit junk
+    cmds:
+      - uvx pre-commit install
+
   # Combined Tasks
+  fix:
+    desc: Perform basic automated cleanup
+    deps:
+      - clippy:fix
+      - fmt
+      - check
+
+  install:all:
+    desc: Install everything needed for local development
+    deps:
+      - install
+      - install:playwright
+      - install:pre-commit
+
   ci:
     desc: Run all CI checks (format, clippy, test)
     cmds:
-      - task fmt:check
-      - task clippy
-      - task test
+      - task: fmt:check
+      - task: clippy
+      - task: test
