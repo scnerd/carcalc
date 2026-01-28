@@ -1,5 +1,6 @@
 use leptos::prelude::*;
 
+use crate::components::ui::Tooltip;
 use crate::models::SharedSettings;
 
 #[component]
@@ -15,8 +16,9 @@ pub fn SharedSettingsForm(
                 </h2>
                 <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
                     <div>
-                        <label for="opportunity-rate" class="block text-sm font-medium text-gray-700">
+                        <label for="opportunity-rate" class="block text-sm font-medium text-gray-700 inline-flex items-center">
                             "Opportunity Cost Rate (%)"
+                            <Tooltip text="The annual return rate you could earn by investing the money instead of tying it up in a car. This represents the financial opportunity you're giving up. Common values: 8-10% for stock market average, 5% for conservative investments." />
                         </label>
                         <input
                             type="number"
@@ -31,8 +33,9 @@ pub fn SharedSettingsForm(
                         />
                     </div>
                     <div>
-                        <label for="annual-mileage" class="block text-sm font-medium text-gray-700">
+                        <label for="annual-mileage" class="block text-sm font-medium text-gray-700 inline-flex items-center">
                             "Annual Mileage"
+                            <Tooltip text="How many miles you expect to drive per year. This affects fuel costs and maintenance schedules. Average values: 12,000-15,000 miles for typical commuters, 20,000+ for high-mileage drivers, 5,000-8,000 for occasional drivers." />
                         </label>
                         <input
                             type="number"
@@ -47,8 +50,9 @@ pub fn SharedSettingsForm(
                         />
                     </div>
                     <div>
-                        <label for="lifetime-miles" class="block text-sm font-medium text-gray-700">
+                        <label for="lifetime-miles" class="block text-sm font-medium text-gray-700 inline-flex items-center">
                             "Default Lifetime Miles"
+                            <Tooltip text="The total miles you plan to drive a car over its lifetime with you. This determines how long you'll own the vehicle and affects total cost calculations. Common values: 150,000-200,000 miles for most vehicles, 250,000+ for highly reliable cars." />
                         </label>
                         <input
                             type="number"
@@ -63,8 +67,9 @@ pub fn SharedSettingsForm(
                         />
                     </div>
                     <div>
-                        <label for="gas-price" class="block text-sm font-medium text-gray-700">
+                        <label for="gas-price" class="block text-sm font-medium text-gray-700 inline-flex items-center">
                             "Average Gas Price ($/gallon)"
+                            <Tooltip text="The average price per gallon of gas in your area. This affects the fuel cost calculation. Check your local gas station prices or use national averages. Consider using a long-term average rather than current prices for more stable comparisons." />
                         </label>
                         <input
                             type="number"

@@ -3,6 +3,7 @@ mod cars;
 mod home;
 mod maintenance;
 mod settings;
+pub mod ui;
 
 pub use app::App;
 pub use home::HomePage;

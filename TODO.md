@@ -41,7 +41,7 @@ Last Updated: 2026-01-27
 - `src/lib.rs` - SharedSettingsForm component (lines 425-504)
 
 **Outstanding Items**:
-- [ ] Add tooltips with detailed explanations for each field
+- [x] Add tooltips with detailed explanations for each field
 - [ ] Add default value reset button
 - [ ] Create percentage and currency formatters (currently using basic number inputs)
 
