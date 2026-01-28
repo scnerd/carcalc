@@ -327,10 +327,18 @@ task build              # Development build
 task build:release      # Optimized production build
 ```
 
+**Testing**
+```bash
+task test              # Run Rust unit tests
+task test:e2e          # Run Playwright e2e tests (builds first)
+task test:e2e:ui       # Run Playwright tests in UI mode
+```
+
 **Maintenance**
 ```bash
-task clean        # Clean build artifacts
-task install      # Install Rust WASM target and Trunk
+task clean             # Clean build artifacts
+task install           # Install Rust WASM target and Trunk
+task install:playwright # Install Playwright and e2e test dependencies
 ```
 
 #### Recommended Claude Code Workflow
@@ -395,6 +403,51 @@ pub fn ComponentName(
 - Mock database operations in component tests
 - Test user interactions (clicks, form submissions)
 - Verify accessibility (keyboard navigation, screen readers)
+
+### End-to-End Testing with Playwright
+
+**Setup Requirements**
+When setting up Playwright for the first time or in a new environment:
+1. Run `task install:playwright` to install all dependencies
+2. This installs: npm packages, wasm-bindgen-cli (matching version 0.2.108), and Chromium browser
+
+**Important Notes**
+- Playwright version pinned to 1.56.1 to match pre-installed binaries in some environments
+- wasm-bindgen-cli must match the version in Cargo.toml (0.2.108)
+- Tests should be placed in `tests/` directory with `.spec.js` or `.spec.ts` extension
+- Dev server must be running at http://localhost:8080 for tests to work
+- Use `task test:e2e` to automatically build and run tests
+- Use `task test:e2e:ui` for interactive test debugging
+
+**Test Organization**
+```
+tests/
+├── e2e/
+│   ├── home.spec.js           # Homepage and navigation tests
+│   ├── lifestyle.spec.js      # Lifestyle settings tests
+│   ├── cars.spec.js           # Car CRUD operations
+│   └── calculations.spec.js   # TCO calculation verification
+└── playwright.config.js       # Playwright configuration
+```
+
+**Common Test Patterns**
+```javascript
+// Wait for WASM to initialize
+await page.waitForLoadState('networkidle');
+await page.waitForTimeout(1000); // Additional buffer for WASM
+
+// Test navigation
+await page.goto('http://localhost:8080');
+await expect(page).toHaveTitle(/CarCalc/);
+
+// Interact with forms
+await page.fill('input[name="annual_mileage"]', '12000');
+await page.click('button[type="submit"]');
+
+// Verify localStorage persistence
+const storage = await page.evaluate(() => localStorage.getItem('key'));
+expect(JSON.parse(storage)).toMatchObject({...});
+```
 
 ## Future Enhancements
 
