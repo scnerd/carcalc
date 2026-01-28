@@ -1,12 +1,14 @@
+use codee::string::JsonSerdeCodec;
 use leptos::prelude::*;
 use leptos_meta::*;
 use leptos_router::{components::*, *};
+use leptos_use::storage::use_local_storage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // Data Structures
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct SharedSettings {
     pub opportunity_cost_rate: f64,
     pub annual_mileage: f64,
@@ -34,7 +36,7 @@ pub struct MaintenanceDataPoint {
 
 /// Maintenance cost data for a specific make+model
 /// Contains two tables: one based on mileage, one based on time
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct MaintenanceCostData {
     pub make: String,
     pub model: String,
@@ -139,7 +141,7 @@ impl MaintenanceCostData {
 }
 
 /// Storage for all maintenance cost data, keyed by make_model
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq)]
 pub struct MaintenanceCostDatabase {
     pub data: HashMap<String, MaintenanceCostData>,
 }
@@ -259,7 +261,7 @@ pub fn get_sample_maintenance_data() -> MaintenanceCostDatabase {
     db
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Car {
     pub id: usize,
     pub make: String,
@@ -421,7 +423,7 @@ pub fn App() -> impl IntoView {
 
 #[component]
 fn SharedSettingsForm(
-    settings: ReadSignal<SharedSettings>,
+    settings: Signal<SharedSettings>,
     set_settings: WriteSignal<SharedSettings>,
 ) -> impl IntoView {
     view! {
@@ -588,7 +590,7 @@ fn CarCostSummary(computed: ComputedCarData) -> impl IntoView {
 #[component]
 fn CarForm(
     car: ReadSignal<Car>,
-    set_car: WriteSignal<Car>,
+    set_car_wrapper: impl Fn(&dyn Fn(&mut Car)) + 'static + Copy,
 ) -> impl IntoView {
     view! {
         <div class="mt-4 space-y-6">
@@ -600,7 +602,7 @@ fn CarForm(
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         prop:value=move || car.get().make
                         on:input=move |ev| {
-                            set_car.update(|c| c.make = event_target_value(&ev));
+                            set_car_wrapper(&|c| c.make = event_target_value(&ev));
                         }
                     />
                 </div>
@@ -611,7 +613,7 @@ fn CarForm(
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         prop:value=move || car.get().model
                         on:input=move |ev| {
-                            set_car.update(|c| c.model = event_target_value(&ev));
+                            set_car_wrapper(&|c| c.model = event_target_value(&ev));
                         }
                     />
                 </div>
@@ -622,7 +624,7 @@ fn CarForm(
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         prop:value=move || car.get().trim
                         on:input=move |ev| {
-                            set_car.update(|c| c.trim = event_target_value(&ev));
+                            set_car_wrapper(&|c| c.trim = event_target_value(&ev));
                         }
                     />
                 </div>
@@ -633,7 +635,7 @@ fn CarForm(
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         prop:value=move || car.get().year
                         on:input=move |ev| {
-                            set_car.update(|c| c.year = event_target_value(&ev));
+                            set_car_wrapper(&|c| c.year = event_target_value(&ev));
                         }
                     />
                 </div>
@@ -647,7 +649,7 @@ fn CarForm(
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         prop:value=move || car.get().purchase_price
                         on:input=move |ev| {
-                            set_car.update(|c| c.purchase_price = event_target_value(&ev));
+                            set_car_wrapper(&|c| c.purchase_price = event_target_value(&ev));
                         }
                     />
                 </div>
@@ -661,7 +663,7 @@ fn CarForm(
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         prop:value=move || car.get().current_mileage
                         on:input=move |ev| {
-                            set_car.update(|c| c.current_mileage = event_target_value(&ev));
+                            set_car_wrapper(&|c| c.current_mileage = event_target_value(&ev));
                         }
                     />
                 </div>
@@ -675,7 +677,7 @@ fn CarForm(
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         prop:value=move || car.get().mpg
                         on:input=move |ev| {
-                            set_car.update(|c| c.mpg = event_target_value(&ev));
+                            set_car_wrapper(&|c| c.mpg = event_target_value(&ev));
                         }
                     />
                 </div>
@@ -689,7 +691,7 @@ fn CarForm(
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         prop:value=move || car.get().insurance_cost
                         on:input=move |ev| {
-                            set_car.update(|c| c.insurance_cost = event_target_value(&ev));
+                            set_car_wrapper(&|c| c.insurance_cost = event_target_value(&ev));
                         }
                     />
                 </div>
@@ -705,7 +707,7 @@ fn CarForm(
                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                             prop:value=move || car.get().vin
                             on:input=move |ev| {
-                                set_car.update(|c| c.vin = event_target_value(&ev));
+                                set_car_wrapper(&|c| c.vin = event_target_value(&ev));
                             }
                         />
                     </div>
@@ -716,7 +718,7 @@ fn CarForm(
                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                             prop:value=move || car.get().listing_url
                             on:input=move |ev| {
-                                set_car.update(|c| c.listing_url = event_target_value(&ev));
+                                set_car_wrapper(&|c| c.listing_url = event_target_value(&ev));
                             }
                         />
                     </div>
@@ -728,7 +730,7 @@ fn CarForm(
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         prop:value=move || car.get().notes
                         on:input=move |ev| {
-                            set_car.update(|c| c.notes = event_target_value(&ev));
+                            set_car_wrapper(&|c| c.notes = event_target_value(&ev));
                         }
                     ></textarea>
                 </div>
@@ -739,15 +741,23 @@ fn CarForm(
 
 #[component]
 fn CarCard(
-    car: ReadSignal<Car>,
-    set_car: WriteSignal<Car>,
+    car: Car,
+    update_car: impl Fn(Car) + 'static + Copy + Send + Sync,
     car_id: usize,
     expanded_cars: ReadSignal<Vec<usize>>,
     set_expanded_cars: WriteSignal<Vec<usize>>,
-    settings: ReadSignal<SharedSettings>,
-    maintenance_db: ReadSignal<MaintenanceCostDatabase>,
+    settings: Signal<SharedSettings>,
+    maintenance_db: Signal<MaintenanceCostDatabase>,
     on_delete: Box<dyn Fn()>,
 ) -> impl IntoView {
+    let (car_signal, set_car_signal) = signal(car);
+
+    // Create a wrapper that updates both local signal and parent
+    let set_car_wrapper = move |f: &dyn Fn(&mut Car)| {
+        set_car_signal.update(f);
+        update_car(car_signal.get());
+    };
+
     let is_expanded = move || expanded_cars.get().contains(&car_id);
 
     let toggle_expanded = move |_| {
@@ -761,7 +771,7 @@ fn CarCard(
     };
 
     let car_display = move || {
-        let c = car.get();
+        let c = car_signal.get();
         let name = if !c.make.is_empty() || !c.model.is_empty() {
             format!("{} {}", c.make, c.model).trim().to_string()
         } else {
@@ -775,7 +785,7 @@ fn CarCard(
         format!("{}{}", name, year)
     };
 
-    let computed_data = move || compute_car_data(&car.get(), &settings.get(), &maintenance_db.get());
+    let computed_data = move || compute_car_data(&car_signal.get(), &settings.get(), &maintenance_db.get());
 
     view! {
         <div class="bg-white overflow-hidden shadow rounded-lg">
@@ -809,7 +819,7 @@ fn CarCard(
                 </div>
 
                 <Show when=is_expanded>
-                    <CarForm car=car set_car=set_car />
+                    <CarForm car=car_signal set_car_wrapper=set_car_wrapper />
                     {move || {
                         if let Some(computed) = computed_data() {
                             view! { <CarCostSummary computed=computed /> }.into_any()
@@ -843,8 +853,8 @@ fn CarCard(
 
 #[component]
 fn MaintenanceDataEditor(
-    maintenance_db: ReadSignal<MaintenanceCostDatabase>,
-    set_maintenance_db: WriteSignal<MaintenanceCostDatabase>,
+    maintenance_db: Signal<MaintenanceCostDatabase>,
+    _set_maintenance_db: WriteSignal<MaintenanceCostDatabase>,
 ) -> impl IntoView {
     let (selected_key, set_selected_key) = signal::<Option<String>>(None);
     let (is_expanded, set_is_expanded) = signal(false);
@@ -1010,19 +1020,24 @@ fn MaintenanceDataEditor(
 
 #[component]
 fn CarList(
-    cars: ReadSignal<Vec<(ReadSignal<Car>, WriteSignal<Car>)>>,
-    set_cars: WriteSignal<Vec<(ReadSignal<Car>, WriteSignal<Car>)>>,
-    settings: ReadSignal<SharedSettings>,
-    maintenance_db: ReadSignal<MaintenanceCostDatabase>,
+    cars: Signal<Vec<Car>>,
+    set_cars: WriteSignal<Vec<Car>>,
+    settings: Signal<SharedSettings>,
+    maintenance_db: Signal<MaintenanceCostDatabase>,
 ) -> impl IntoView {
     let (expanded_cars, set_expanded_cars) = signal(Vec::<usize>::new());
     let next_id = RwSignal::new(1_usize);
+
+    // Initialize next_id from existing cars
+    if let Some(max_id) = cars.get().iter().map(|c| c.id).max() {
+        next_id.set(max_id + 1);
+    }
 
     let add_car = move |_| {
         let id = next_id.get();
         next_id.update(|n| *n += 1);
 
-        let new_car = signal(Car::new(id));
+        let new_car = Car::new(id);
         set_cars.update(|cars| {
             cars.push(new_car);
         });
@@ -1048,33 +1063,44 @@ fn CarList(
 
             <For
                 each=move || cars.get().into_iter().enumerate()
-                key=|(_, (car, _))| car.get().id
-                children=move |(index, (car, set_car))| {
-                    let car_id = car.get().id;
+                key=|(_, car)| car.id
+                children=move |(index, car)| {
+                    let car_id = car.id;
+
+                    let update_car = {
+                        let set_cars = set_cars.clone();
+                        move |updated_car: Car| {
+                            set_cars.update(|cars| {
+                                if index < cars.len() {
+                                    cars[index] = updated_car;
+                                }
+                            });
+                        }
+                    };
 
                     let on_delete = {
                         let set_cars = set_cars.clone();
                         let set_expanded_cars = set_expanded_cars.clone();
-                        Box::new(move || {
+                        move || {
                             set_cars.update(|cars| {
-                                cars.remove(index);
+                                cars.retain(|c| c.id != car_id);
                             });
                             set_expanded_cars.update(|expanded| {
                                 expanded.retain(|&id| id != car_id);
                             });
-                        })
+                        }
                     };
 
                     view! {
                         <CarCard
                             car=car
-                            set_car=set_car
+                            update_car=update_car
                             car_id=car_id
                             expanded_cars=expanded_cars
                             set_expanded_cars=set_expanded_cars
                             settings=settings
                             maintenance_db=maintenance_db
-                            on_delete=on_delete
+                            on_delete=Box::new(on_delete)
                         />
                     }
                 }
@@ -1095,14 +1121,19 @@ fn CarList(
 
 #[component]
 fn HomePage() -> impl IntoView {
-    let (settings, set_settings) = signal(SharedSettings::default());
-    let (cars, set_cars) = signal(Vec::<(ReadSignal<Car>, WriteSignal<Car>)>::new());
-    let (maintenance_db, set_maintenance_db) = signal(get_sample_maintenance_data());
+    let (settings, set_settings, _) =
+        use_local_storage::<SharedSettings, JsonSerdeCodec>("carcalc_settings");
+
+    let (maintenance_db, set_maintenance_db, _) =
+        use_local_storage::<MaintenanceCostDatabase, JsonSerdeCodec>("carcalc_maintenance_db");
+
+    let (cars, set_cars, _) =
+        use_local_storage::<Vec<Car>, JsonSerdeCodec>("carcalc_cars");
 
     view! {
         <div class="px-4 py-6 sm:px-0 space-y-6">
             <SharedSettingsForm settings=settings set_settings=set_settings />
-            <MaintenanceDataEditor maintenance_db=maintenance_db set_maintenance_db=set_maintenance_db />
+            <MaintenanceDataEditor maintenance_db=maintenance_db _set_maintenance_db=set_maintenance_db />
             <CarList cars=cars set_cars=set_cars settings=settings maintenance_db=maintenance_db />
         </div>
     }
