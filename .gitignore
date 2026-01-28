@@ -30,3 +30,6 @@ package-lock.json
 
 # Cargo.lock for applications
 Cargo.lock
+
+.env
+.env.*

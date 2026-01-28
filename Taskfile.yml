@@ -20,6 +20,16 @@ tasks:
   # Building
   build:
     desc: Build the project in development mode
+    sources:
+      - src/**
+      - Cargo.toml
+      - Cargo.lock
+      - Trunk.toml
+      - ./index.html
+      - ./input.css
+      - ./tailwind.config.js
+    generates:
+      - dist/
     cmds:
       - trunk build
 
@@ -132,3 +142,14 @@ tasks:
       - task: fmt:check
       - task: clippy
       - task: test
+
+  publish:
+    desc: Publish site to Vercel
+    deps:
+      - build
+    sources:
+      - dist/
+    dotenv:
+      - .env
+    cmds:
+      - npx vercel deploy dist --prod
