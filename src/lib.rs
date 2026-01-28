@@ -1,10 +1,18 @@
 use codee::string::JsonSerdeCodec;
+use leptos::mount::mount_to_body;
 use leptos::prelude::*;
 use leptos_meta::*;
 use leptos_router::{components::*, *};
 use leptos_use::storage::use_local_storage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use wasm_bindgen::prelude::wasm_bindgen;
+
+#[wasm_bindgen(start)]
+pub fn main() {
+    console_error_panic_hook::set_once();
+    mount_to_body(|| view! { <App/> })
+}
 
 // Data Structures
 
@@ -398,7 +406,6 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
 
     view! {
-        <Stylesheet id="leptos" href="/pkg/carcalc.css"/>
         <Title text="CarCalc - Total Cost of Ownership Calculator"/>
         <Meta name="description" content="Calculate the true total cost of owning any car"/>
 
@@ -1043,7 +1050,7 @@ fn CarList(
     let next_id = RwSignal::new(1_usize);
 
     // Initialize next_id from existing cars
-    if let Some(max_id) = cars.get().iter().map(|c| c.id).max() {
+    if let Some(max_id) = cars.get_untracked().iter().map(|c| c.id).max() {
         next_id.set(max_id + 1);
     }
 
