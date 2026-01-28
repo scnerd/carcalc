@@ -808,6 +808,20 @@ fn CarCard(
                             <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
                         </svg>
                     </button>
+                    {move || {
+                        if let Some(computed) = computed_data() {
+                            view! {
+                                <div class="ml-4 text-right">
+                                    <div class="text-sm text-gray-500">"Annual Cost"</div>
+                                    <div class="text-lg font-semibold text-blue-600">
+                                        {format!("${:.0}", computed.annual_cost)}
+                                    </div>
+                                </div>
+                            }.into_any()
+                        } else {
+                            view! { <div></div> }.into_any()
+                        }
+                    }}
                     <button
                         class="ml-4 text-red-600 hover:text-red-800"
                         on:click=move |_| on_delete()
